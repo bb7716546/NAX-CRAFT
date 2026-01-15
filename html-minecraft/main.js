@@ -254,4 +254,46 @@ function animate() {
       .addScaledVector(rightVec, wish.x)
       .normalize();
 
-    velocity.x = move.x * w*
+    velocity.x = move.x * walkSpeed;
+    velocity.z = move.z * walkSpeed;
+
+    // gravity
+    velocity.y -= gravity * dt;
+
+    // jump
+    if (keys.has("Space") && onGround) {
+      velocity.y = jumpSpeed;
+      onGround = false;
+    }
+
+    // apply
+    const pos = controls.getObject().position;
+    pos.x += velocity.x * dt;
+    pos.y += velocity.y * dt;
+    pos.z += velocity.z * dt;
+
+    resolvePlayerCollisions(pos);
+
+    // prevent falling forever (teleport up)
+    if (pos.y < -20) {
+      pos.set(0, 5, 8);
+      velocity.set(0, 0, 0);
+    }
+
+    // status
+    const t = getTargetBlock();
+    statusEl.textContent = t
+      ? `Target: (${t.x}, ${t.y}, ${t.z}) • Blocks: ${blocks.size}`
+      : `Blocks: ${blocks.size}`;
+  }
+
+  renderer.render(scene, camera);
+}
+animate();
+
+// Resize
+window.addEventListener("resize", () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
