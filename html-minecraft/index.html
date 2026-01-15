@@ -1,70 +1,12 @@
 <!DOCTYPE html>
 <html>
-<head>
-<meta charset="UTF-8">
-<title>NAX-CRAFT</title>
-<meta name="viewport" content="width=device-width,initial-scale=1">
-
-<style>
-html,body{margin:0;overflow:hidden;background:#000;font-family:Arial}
-#hud{position:fixed;top:10px;left:10px;color:#fff;z-index:10}
-canvas{display:block}
-</style>
-</head>
-
 <body>
-<div id="hud">
-  <b>NAX-CRAFT</b><br>
-  Click to start • WASD • Space
-</div>
-
-<!-- THREE.JS (NON-MODULE, ALWAYS WORKS) -->
-<script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
-<script src="https://unpkg.com/three@0.160.0/examples/js/controls/PointerLockControls.js"></script>
+<h1>NAX-CRAFT</h1>
 
 <script>
-/* BASIC THREE.JS TEST (PROVES IT WORKS) */
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x87ceeb);
-
-const camera = new THREE.PerspectiveCamera(75,innerWidth/innerHeight,0.1,1000);
-const renderer = new THREE.WebGLRenderer({antialias:true});
-renderer.setSize(innerWidth,innerHeight);
-document.body.appendChild(renderer.domElement);
-
-scene.add(new THREE.HemisphereLight(0xffffff,0x444444,1));
-
-const sun = new THREE.DirectionalLight(0xffffff,0.8);
-sun.position.set(10,20,10);
-scene.add(sun);
-
-const controls = new THREE.PointerLockControls(camera, document.body);
-scene.add(controls.getObject());
-camera.position.set(0,3,6);
-
-document.addEventListener("click",()=>controls.lock());
-
-const geo = new THREE.BoxGeometry(1,1,1);
-const mat = new THREE.MeshStandardMaterial({color:0x3cb043});
-
-for(let x=-10;x<=10;x++)
-for(let z=-10;z<=10;z++){
-  const b=new THREE.Mesh(geo,mat);
-  b.position.set(x+0.5,0.5,z+0.5);
-  scene.add(b);
-}
-
-function animate(){
-  requestAnimationFrame(animate);
-  renderer.render(scene,camera);
-}
-animate();
-
-addEventListener("resize",()=>{
-  camera.aspect=innerWidth/innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth,innerHeight);
-});
+document.body.style.background = "black";
+document.body.innerHTML += "<p style='color:lime'>JAVASCRIPT IS RUNNING</p>";
 </script>
+
 </body>
 </html>
