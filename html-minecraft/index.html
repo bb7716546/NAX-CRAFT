@@ -3,18 +3,30 @@
 <head>
   <meta charset="UTF-8" />
   <title>NAX-CRAFT</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
   <div id="hud">
-    <h1>NAX-CRAFT</h1>
-    <p>a minecraft online version</p>
-    <p>Click to start</p>
+    <div class="title">NAX-CRAFT</div>
+    <div class="hint">
+      Click to lock mouse • WASD • Space jump • LMB break • RMB place • R reset
+      <br />
+      Autosaves. Press <b>L</b> to force-load, <b>K</b> to force-save.
+    </div>
+    <div id="status">Loading…</div>
   </div>
 
-  <!-- MUST BE MODULE -->
+  <div class="crosshair"></div>
+
+  <div id="errbox" class="errbox hidden">
+    <div class="errtitle">Script error</div>
+    <pre id="errmsg"></pre>
+    <div class="errhint">
+      If this appears on GitHub Pages, your <b>main.js</b> didn’t load as a module or path is wrong.
+    </div>
+  </div>
+
   <script type="module" src="./main.js"></script>
 </body>
 </html>
