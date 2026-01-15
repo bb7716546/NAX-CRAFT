@@ -11,19 +11,37 @@ html,body{
   padding:0;
   overflow:hidden;
   background:#000;
-  color:white;
   font-family:Arial,Helvetica,sans-serif;
 }
 #hud{
   position:fixed;
   top:10px;
   left:10px;
+  color:white;
   z-index:10;
+  text-shadow:0 2px 6px #000;
 }
-#status{
-  font-size:12px;
-  opacity:.9;
+#status{font-size:12px;opacity:.9}
+
+.crosshair{
+  position:fixed;
+  left:50%;
+  top:50%;
+  width:14px;
+  height:14px;
+  margin-left:-7px;
+  margin-top:-7px;
+  pointer-events:none;
+  z-index:9;
 }
+.crosshair::before,.crosshair::after{
+  content:"";
+  position:absolute;
+  background:white;
+}
+.crosshair::before{width:2px;height:14px;left:6px;top:0}
+.crosshair::after{height:2px;width:14px;top:6px;left:0}
+
 canvas{display:block}
 </style>
 </head>
@@ -31,41 +49,29 @@ canvas{display:block}
 <body>
 <div id="hud">
   <b>NAX-CRAFT</b><br>
-  HTML + JavaScript version<br>
-  <span id="status">JS loading…</span>
+  WASD • Mouse • Click to lock
+  <div id="status">JavaScript running ✔</div>
 </div>
+<div class="crosshair"></div>
 
-<!-- STEP 1: PROVE JAVASCRIPT RUNS -->
-<script>
-document.getElementById("status").textContent = "JavaScript is running ✔";
-console.log("JS is running");
-</script>
-
-<!-- STEP 2: LOAD THREE.JS (NON-MODULE, SAFE) -->
 <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
 <script src="https://unpkg.com/three@0.160.0/examples/js/controls/PointerLockControls.js"></script>
 
-<!-- STEP 3: GAME CODE -->
 <script>
-/* ---------- BASIC THREE SETUP ---------- */
+/* ---------- SCENE ---------- */
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x87ceeb);
+scene.background = new THREE.Color(0x87CEEB); // Minecraft sky
 
-const camera = new THREE.PerspectiveCamera(
-  75,
-  window.innerWidth/window.innerHeight,
-  0.1,
-  1000
-);
-
-const renderer = new THREE.WebGLRenderer({antialias:true});
-renderer.setSize(window.innerWidth,window.innerHeight);
+const camera = new THREE.PerspectiveCamera(75,innerWidth/innerHeight,0.1,1000);
+const renderer = new THREE.WebGLRenderer({antialias:false});
+renderer.setSize(innerWidth,innerHeight);
+renderer.setPixelRatio(1);
 document.body.appendChild(renderer.domElement);
 
-/* ---------- LIGHT ---------- */
-scene.add(new THREE.HemisphereLight(0xffffff,0x444444,1));
-const sun = new THREE.DirectionalLight(0xffffff,0.8);
-sun.position.set(10,20,10);
+/* ---------- LIGHTING (MC-LIKE) ---------- */
+scene.add(new THREE.AmbientLight(0xffffff,0.5));
+const sun = new THREE.DirectionalLight(0xffffff,0.9);
+sun.position.set(50,100,25);
 scene.add(sun);
 
 /* ---------- CONTROLS ---------- */
@@ -73,36 +79,94 @@ const controls = new THREE.PointerLockControls(camera, document.body);
 scene.add(controls.getObject());
 camera.position.set(0,3,6);
 
-document.addEventListener("click",()=>{
-  controls.lock();
-});
+document.addEventListener("click",()=>controls.lock());
 
-/* ---------- SIMPLE BLOCK WORLD ---------- */
+/* ---------- PIXEL TEXTURE GENERATOR ---------- */
+function pixelTexture(base){
+  const c=document.createElement("canvas");
+  c.width=c.height=16;
+  const g=c.getContext("2d");
+  for(let y=0;y<16;y++)for(let x=0;x<16;x++){
+    const n=(Math.random()*30)-15;
+    g.fillStyle=`rgb(${base[0]+n},${base[1]+n},${base[2]+n})`;
+    g.fillRect(x,y,1,1);
+  }
+  const t=new THREE.CanvasTexture(c);
+  t.magFilter=THREE.NearestFilter;
+  t.minFilter=THREE.NearestFilter;
+  return t;
+}
+
+const grassTex = pixelTexture([95,159,53]);
+const dirtTex  = pixelTexture([134,96,67]);
+const stoneTex = pixelTexture([125,125,125]);
+
+/* ---------- BLOCK MATERIALS ---------- */
+const grassMat = new THREE.MeshLambertMaterial({map:grassTex});
+const dirtMat  = new THREE.MeshLambertMaterial({map:dirtTex});
+const stoneMat = new THREE.MeshLambertMaterial({map:stoneTex});
+
 const geo = new THREE.BoxGeometry(1,1,1);
-const mat = new THREE.MeshStandardMaterial({color:0x3cb043});
 
-for(let x=-10;x<=10;x++){
-  for(let z=-10;z<=10;z++){
-    const block = new THREE.Mesh(geo,mat);
-    block.position.set(x+0.5,0.5,z+0.5);
-    scene.add(block);
+/* ---------- WORLD ---------- */
+for(let x=-16;x<=16;x++){
+  for(let z=-16;z<=16;z++){
+    const grass = new THREE.Mesh(geo,grassMat);
+    grass.position.set(x+0.5,0.5,z+0.5);
+    scene.add(grass);
+
+    const dirt = new THREE.Mesh(geo,dirtMat);
+    dirt.position.set(x+0.5,-0.5,z+0.5);
+    scene.add(dirt);
+
+    const stone = new THREE.Mesh(geo,stoneMat);
+    stone.position.set(x+0.5,-1.5,z+0.5);
+    scene.add(stone);
   }
 }
 
-/* ---------- RENDER LOOP ---------- */
+/* ---------- SIMPLE MOVEMENT ---------- */
+const keys={};
+document.addEventListener("keydown",e=>keys[e.code]=true);
+document.addEventListener("keyup",e=>keys[e.code]=false);
+
+let yVel=0, onGround=false;
+
 function animate(){
   requestAnimationFrame(animate);
+
+  if(controls.isLocked){
+    const dir=new THREE.Vector3();
+    controls.getDirection(dir);
+    dir.y=0;dir.normalize();
+    const right=new THREE.Vector3().crossVectors(dir,new THREE.Vector3(0,1,0));
+
+    if(keys["KeyW"]) controls.getObject().position.addScaledVector(dir,0.12);
+    if(keys["KeyS"]) controls.getObject().position.addScaledVector(dir,-0.12);
+    if(keys["KeyA"]) controls.getObject().position.addScaledVector(right,0.12);
+    if(keys["KeyD"]) controls.getObject().position.addScaledVector(right,-0.12);
+
+    yVel -= 0.02;
+    if(keys["Space"] && onGround){ yVel=0.35; onGround=false; }
+    controls.getObject().position.y += yVel;
+
+    if(controls.getObject().position.y < 2){
+      controls.getObject().position.y = 2;
+      yVel = 0;
+      onGround = true;
+    }
+  }
+
   renderer.render(scene,camera);
 }
 animate();
 
 /* ---------- RESIZE ---------- */
-window.addEventListener("resize",()=>{
-  camera.aspect = window.innerWidth/window.innerHeight;
+addEventListener("resize",()=>{
+  camera.aspect=innerWidth/innerHeight;
   camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth,window.innerHeight);
+  renderer.setSize(innerWidth,innerHeight);
 });
 </script>
-
 </body>
 </html>
