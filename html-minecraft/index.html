@@ -1,32 +1,227 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>NAX-CRAFT</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <link rel="stylesheet" href="./style.css" />
+<meta charset="UTF-8">
+<title>NAX-CRAFT</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+
+<style>
+html,body{
+  margin:0;
+  padding:0;
+  overflow:hidden;
+  background:#000;
+  font-family:Arial,Helvetica,sans-serif;
+}
+#hud{
+  position:fixed;
+  top:10px;
+  left:10px;
+  color:white;
+  z-index:10;
+  text-shadow:0 2px 10px #000;
+}
+#hud b{font-size:18px}
+#status{font-size:12px;opacity:.9}
+.crosshair{
+  position:fixed;
+  left:50%;
+  top:50%;
+  width:14px;
+  height:14px;
+  margin:-7px;
+  z-index:9;
+  pointer-events:none;
+}
+.crosshair::before,.crosshair::after{
+  content:"";
+  position:absolute;
+  background:white;
+}
+.crosshair::before{width:2px;height:14px;left:6px;top:0}
+.crosshair::after{height:2px;width:14px;top:6px;left:0}
+canvas{display:block}
+</style>
 </head>
+
 <body>
-  <div id="hud">
-    <div class="title">NAX-CRAFT</div>
-    <div class="hint">
-      Click to lock mouse • WASD • Space jump • LMB break • RMB place • R reset
-      <br />
-      Autosaves. Press <b>L</b> to force-load, <b>K</b> to force-save.
-    </div>
-    <div id="status">Loading…</div>
-  </div>
+<div id="hud">
+  <b>NAX-CRAFT</b><br>
+  WASD • Space • LMB break • RMB place<br>
+  Autosaves to browser
+  <div id="status">Loading…</div>
+</div>
+<div class="crosshair"></div>
 
-  <div class="crosshair"></div>
+<!-- EVERYTHING IS INLINE -->
+<script type="module">
+import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
+import { PointerLockControls } from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/PointerLockControls.js";
 
-  <div id="errbox" class="errbox hidden">
-    <div class="errtitle">Script error</div>
-    <pre id="errmsg"></pre>
-    <div class="errhint">
-      If this appears on GitHub Pages, your <b>main.js</b> didn’t load as a module or path is wrong.
-    </div>
-  </div>
+/* ---------- BASIC SETUP ---------- */
+const SAVE_KEY="naxcraft_save_v1";
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0x87ceeb);
 
-  <script type="module" src="./main.js"></script>
+const camera=new THREE.PerspectiveCamera(75,innerWidth/innerHeight,0.1,1000);
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth,innerHeight);
+document.body.appendChild(renderer.domElement);
+
+/* ---------- LIGHT ---------- */
+scene.add(new THREE.HemisphereLight(0xffffff,0x444444,1));
+const sun=new THREE.DirectionalLight(0xffffff,.8);
+sun.position.set(10,20,10);
+scene.add(sun);
+
+/* ---------- CONTROLS ---------- */
+const controls=new PointerLockControls(camera,document.body);
+scene.add(controls.getObject());
+camera.position.set(0,3,6);
+addEventListener("click",()=>controls.lock());
+addEventListener("contextmenu",e=>e.preventDefault());
+
+/* ---------- INPUT ---------- */
+const keys=new Set();
+addEventListener("keydown",e=>keys.add(e.code));
+addEventListener("keyup",e=>keys.delete(e.code));
+
+/* ---------- PIXEL TEXTURES ---------- */
+function tex(color){
+  const c=document.createElement("canvas");
+  c.width=c.height=32;
+  const g=c.getContext("2d");
+  for(let y=0;y<32;y++)for(let x=0;x<32;x++){
+    const n=(Math.random()*20)-10;
+    g.fillStyle=`rgb(${color[0]+n},${color[1]+n},${color[2]+n})`;
+    g.fillRect(x,y,1,1);
+  }
+  const t=new THREE.CanvasTexture(c);
+  t.magFilter=t.minFilter=THREE.NearestFilter;
+  return t;
+}
+
+const TEX={
+  grass:tex([70,170,70]),
+  dirt:tex([130,85,45]),
+  stone:tex([120,120,120])
+};
+
+/* ---------- BLOCK SYSTEM ---------- */
+const geo=new THREE.BoxGeometry(1,1,1);
+const blocks=new Map();
+
+function key(x,y,z){return `${x},${y},${z}`}
+
+function addBlock(x,y,z,type){
+  const k=key(x,y,z);
+  if(blocks.has(k))return;
+  const mat=new THREE.MeshStandardMaterial({map:TEX[type]});
+  const m=new THREE.Mesh(geo,mat);
+  m.position.set(x+.5,y+.5,z+.5);
+  m.userData={x,y,z};
+  scene.add(m);
+  blocks.set(k,{type,mesh:m});
+}
+
+function removeBlock(x,y,z){
+  const k=key(x,y,z);
+  const b=blocks.get(k);
+  if(!b)return;
+  scene.remove(b.mesh);
+  blocks.delete(k);
+}
+
+/* ---------- WORLD GEN ---------- */
+function gen(){
+  blocks.forEach(b=>scene.remove(b.mesh));
+  blocks.clear();
+  for(let x=-12;x<=12;x++)for(let z=-12;z<=12;z++){
+    addBlock(x,0,z,"grass");
+    addBlock(x,-1,z,"dirt");
+    addBlock(x,-2,z,"stone");
+  }
+}
+gen();
+
+/* ---------- SAVE / LOAD ---------- */
+function save(){
+  const arr=[];
+  blocks.forEach((b,k)=>{
+    const [x,y,z]=k.split(",").map(Number);
+    arr.push([x,y,z,b.type]);
+  });
+  localStorage.setItem(SAVE_KEY,JSON.stringify(arr));
+}
+
+function load(){
+  const raw=localStorage.getItem(SAVE_KEY);
+  if(!raw)return false;
+  gen();
+  JSON.parse(raw).forEach(b=>addBlock(b[0],b[1],b[2],b[3]));
+  return true;
+}
+load();
+
+/* ---------- RAYCAST ---------- */
+const ray=new THREE.Raycaster();
+function target(){
+  ray.setFromCamera({x:0,y:0},camera);
+  const hits=ray.intersectObjects([...blocks.values()].map(b=>b.mesh));
+  if(!hits.length)return null;
+  const o=hits[0].object.userData;
+  const n=hits[0].face.normal;
+  return {x:o.x,y:o.y,z:o.z,n};
+}
+
+/* ---------- BREAK / PLACE ---------- */
+addEventListener("mousedown",e=>{
+  if(!controls.isLocked)return;
+  const t=target();
+  if(!t)return;
+  if(e.button===0) removeBlock(t.x,t.y,t.z);
+  if(e.button===2)
+    addBlock(t.x+Math.round(t.n.x),t.y+Math.round(t.n.y),t.z+Math.round(t.n.z),"dirt");
+});
+
+/* ---------- MOVEMENT ---------- */
+let vy=0,onGround=false;
+function animate(){
+  requestAnimationFrame(animate);
+
+  if(controls.isLocked){
+    const dir=new THREE.Vector3();
+    controls.getDirection(dir);
+    dir.y=0;dir.normalize();
+    const right=new THREE.Vector3().crossVectors(dir,new THREE.Vector3(0,1,0));
+
+    if(keys.has("KeyW"))controls.getObject().position.addScaledVector(dir,.15);
+    if(keys.has("KeyS"))controls.getObject().position.addScaledVector(dir,-.15);
+    if(keys.has("KeyA"))controls.getObject().position.addScaledVector(right,.15);
+    if(keys.has("KeyD"))controls.getObject().position.addScaledVector(right,-.15);
+
+    vy-=0.02;
+    if(keys.has("Space")&&onGround){vy=.3;onGround=false;}
+    controls.getObject().position.y+=vy;
+    if(controls.getObject().position.y<2){
+      controls.getObject().position.y=2;
+      vy=0;onGround=true;
+    }
+  }
+
+  renderer.render(scene,camera);
+}
+animate();
+
+/* ---------- AUTOSAVE ---------- */
+setInterval(save,3000);
+
+/* ---------- RESIZE ---------- */
+addEventListener("resize",()=>{
+  camera.aspect=innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);
+});
+</script>
 </body>
 </html>
